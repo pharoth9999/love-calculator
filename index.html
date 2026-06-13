@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>love calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Kantumruy Pro"', "system-ui", "sans-serif"],
+          },
+          colors: {
+            bg: "#ffffff",
+            card: "#ffffff",
+            accent: "#000000",
+            pink: "#000000",
+            muted: "#666666",
+            line: "#000000",
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="m-0 min-h-screen flex items-center justify-center p-4 sm:p-6 text-black font-sans bg-white">
+  <div class="w-full max-w-md bg-card border border-line rounded-2xl sm:rounded-[20px] p-5 sm:p-8 shadow-2xl">
+    <h1 class="m-0 mb-1 text-2xl sm:text-3xl font-bold bg-gradient-to-r from-accent to-pink bg-clip-text text-center text-transparent">
+      ទស្សន៍ទាយចំណងស្នេហា
+    </h1>
+    
+    <p class="mt-5 mb-4"><span class="font-bold">ចំណាំ:</span> បំពេញឈ្មោះតែត្រូវបានគេហៅជាប្រចាំថ្ងៃ</p>
+
+    <div>
+      <label class="block text-[0.85rem] mb-1.5 font-semibold">
+        ឈ្មោះខាងប្រុស
+      </label>
+      <input id="man" autocomplete="off" placeholder=""
+        class="w-full px-3 py-2 text-md sm:text-[1.6rem] bg-bg border border-line rounded-xl text-black outline-none focus:border-accent transition-colors" />
+      <div id="pickMan" class="mt-2 text-[0.85rem] min-h-[20px] text-muted"></div>
+    </div>
+
+    <div class="">
+      <label class="block text-[0.85rem] mb-1.5 font-semibold">
+        ឈ្មោះខាងស្រី
+      </label>
+      <input id="woman" autocomplete="off" placeholder=""
+        class="w-full px-3 py-2 text-md sm:text-[1.6rem] bg-bg border border-line rounded-xl text-black outline-none focus:border-accent transition-colors" />
+      <div id="pickWoman" class="mt-2 text-[0.85rem] min-h-[20px] text-muted"></div>
+    </div>
+
+    <div class="mt-2.5 flex gap-2.5">
+      <button id="calcBtn"
+        class="flex-1 p-3.5 text-base font-semibold rounded-xl cursor-pointer text-bg bg-gradient-to-r from-accent to-pink hover:opacity-90 active:scale-[0.98] transition">
+        ទស្សន៍ទាយ
+      </button>
+      <button id="clearBtn"
+        class="p-3.5 text-base font-semibold rounded-xl cursor-pointer text-black bg-bg border border-line hover:bg-line/10 active:scale-[0.98] transition">
+        សម្អាត
+      </button>
+    </div>
+
+    <div id="result" class="hidden mt-6 p-5 rounded-xl bg-bg border border-line text-center">
+      <div id="resultBig" class="text-4xl sm:text-5xl font-bold text-accent leading-none"></div>
+    </div>
+  </div>
+
+  <script>
+    // The 33 Khmer consonants in order. Index = position (ក = 1, ដ = 11, ...).
+    const CONSONANTS = [
+      "ក", "ខ", "គ", "ឃ", "ង",
+      "ច", "ឆ", "ជ", "ឈ", "ញ",
+      "ដ", "ឋ", "ឌ", "ឍ", "ណ",
+      "ត", "ថ", "ទ", "ធ", "ន",
+      "ប", "ផ", "ព", "ភ", "ម",
+      "យ", "រ", "ល", "វ", "ស",
+      "ហ", "ឡ", "អ"
+    ];
+
+    const indexOf = (ch) => CONSONANTS.indexOf(ch) + 1; // 0 = not found
+    const isConsonant = (code) => code >= 0x1780 && code <= 0x17A2;
+    const COENG = 0x17D2;
+
+    // Result word for each remainder (0–4).
+    const LABELS = ["មន្ត្រី", "ថ្ម", "ពុទ្ធសែននាងកង្រី", "ថ្ងៃ", "សេដ្ឋី"];
+
+    // Tailwind class sets reused when JS updates state.
+    const PICK_BASE = "mt-2 text-[0.85rem] min-h-[20px]";
+    const BIG_OK = "text-4xl sm:text-5xl font-bold text-accent leading-none";
+    const BIG_ERR = "text-[1.1rem] font-bold text-black leading-none";
+
+    // Split Khmer text into orthographic clusters: each base consonant plus its
+    // attached vowels, signs and subscripts. We only keep the base consonant of
+    // each cluster, so vowels never count as a separate "character".
+    function consonantsOf(text) {
+      const bases = [];
+      let i = 0;
+      while (i < text.length) {
+        const code = text.codePointAt(i);
+        if (isConsonant(code)) {
+          const base = text[i];
+          i++;
+          while (i < text.length) {
+            const c = text.codePointAt(i);
+            if (c === COENG) {            // subscript: coeng + following consonant
+              i++;                         // skip coeng
+              if (i < text.length) i++;    // skip the subscript consonant
+            } else if (c >= 0x17B6 && c <= 0x17DD) {
+              i++;                         // vowel sign or diacritic
+            } else {
+              break;
+            }
+          }
+          bases.push(base);
+        } else {
+          i++; // ignore spaces / non-Khmer characters
+        }
+      }
+      return bases;
+    }
+
+    // Man: middle consonant. Even count -> upper-middle. Exactly 2 -> the first.
+    function manConsonant(bases) {
+      const n = bases.length;
+      if (n === 0) return null;
+      if (n === 2) return bases[0];
+      return bases[Math.floor(n / 2)];
+    }
+
+    // Woman: last consonant.
+    function womanConsonant(bases) {
+      return bases.length ? bases[bases.length - 1] : null;
+    }
+
+    const manInput = document.getElementById("man");
+    const womanInput = document.getElementById("woman");
+    const pickMan = document.getElementById("pickMan");
+    const pickWoman = document.getElementById("pickWoman");
+    const result = document.getElementById("result");
+    const resultBig = document.getElementById("resultBig");
+
+    function describe(input, pickEl, extractor) {
+      const bases = consonantsOf(input.value);
+      if (bases.length === 0) {
+        pickEl.textContent = "";
+        pickEl.className = PICK_BASE + " text-muted";
+        return null;
+      }
+      const ch = extractor(bases);
+      const idx = indexOf(ch);
+      if (!idx) {
+        pickEl.className = PICK_BASE + " text-black";
+        pickEl.innerHTML = `picked "${ch}" — not in the 33 consonants`;
+        return null;
+      }
+      pickEl.className = PICK_BASE + " text-muted";
+      pickEl.innerHTML =
+        `<span class="text-[1.3rem] text-accent align-middle">${ch}</span>`;
+      return idx;
+    }
+
+    function refresh() {
+      describe(manInput, pickMan, manConsonant);
+      describe(womanInput, pickWoman, womanConsonant);
+    }
+
+    [manInput, womanInput].forEach((input) => {
+      input.addEventListener("input", refresh);
+    });
+
+    function calculate() {
+      const im = describe(manInput, pickMan, manConsonant);
+      const iw = describe(womanInput, pickWoman, womanConsonant);
+      result.classList.remove("hidden");
+
+      if (!im || !iw) {
+        resultBig.className = BIG_ERR;
+        resultBig.textContent = "Enter both names with valid Khmer consonants.";
+        return;
+      }
+
+      const sum = im + iw;
+      const remainder = sum % 5;
+      resultBig.className = BIG_OK;
+      resultBig.textContent = LABELS[remainder];
+    }
+
+    function clearAll() {
+      manInput.value = "";
+      womanInput.value = "";
+      result.classList.add("hidden");
+      resultBig.textContent = "";
+      refresh();
+      manInput.focus();
+    }
+
+    document.getElementById("calcBtn").addEventListener("click", calculate);
+    document.getElementById("clearBtn").addEventListener("click", clearAll);
+
+    manInput.focus();
+  </script>
+</body>
+</html>
